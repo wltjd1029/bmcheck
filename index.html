@@ -7,18 +7,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
-    --bg: #0f1115;
-    --card: #1a1d24;
-    --card2: #21252e;
-    --line: #2b313c;
-    --text: #e6e9ef;
-    --muted: #9aa3b2;
-    --accent: #4f8cff;
-    --ok: #2ecc71;
-    --ok-bg: rgba(46, 204, 113, .15);
-    --bad: #ff5a5f;
-    --bad-bg: rgba(255, 90, 95, .15);
-    --warn: #ffb020;
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --card2: #eef1f6;
+    --line: #dfe3ea;
+    --text: #1c2230;
+    --muted: #6b7382;
+    --accent: #2f6bff;
+    --ok: #1ea65a;
+    --ok-bg: rgba(30, 166, 90, .12);
+    --bad: #e23b40;
+    --bad-bg: rgba(226, 59, 64, .12);
+    --warn: #c8841a;
   }
   * { box-sizing: border-box; }
   body {
@@ -32,8 +32,9 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    background: rgba(15, 17, 21, .92);
+    background: rgba(244, 246, 250, .92);
     backdrop-filter: blur(8px);
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
     border-bottom: 1px solid var(--line);
     padding: 14px 20px;
     display: flex;
@@ -92,6 +93,7 @@
     padding: 18px;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(20, 30, 60, .06);
   }
   .card .head {
     display: flex; align-items: center; justify-content: space-between;
