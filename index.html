@@ -210,10 +210,34 @@
   }
   .hist-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
+  /* Auto snapshot settings */
+  .auto-snap {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px;
+    background: var(--card2);
+  }
+  .auto-snap .as-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .auto-snap .as-title { font-weight: 700; font-size: 14px; }
+  .as-toggle { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+  .as-toggle input { width: 16px; height: 16px; }
+  .as-hint { font-size: 12px; color: var(--ok); font-weight: 600; }
+  .as-times { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .as-cell label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .as-cell input[type="time"] {
+    width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--text); padding: 8px 8px; font-size: 14px;
+  }
+  .as-cell input:focus { outline: none; border-color: var(--accent); }
+  .as-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
+  table.hist td.auto-mark { color: var(--accent); }
+
   @media (max-width: 560px) {
     .summary .value { font-size: 24px; }
     table.cfg { font-size: 12px; }
     table.cfg th, table.cfg td { padding: 6px 3px; }
+    .as-times { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -269,8 +293,23 @@
 <!-- Settings viewer modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
-    <h2>⚙ 배정물량 설정 (구글시트 연동)</h2>
-    <p class="sub">설정값은 구글시트 <b>설정시트</b> 탭에서 불러옵니다. 값 변경은 시트에서 하세요. 배정물량 = (해당 요일 1세트 배정건수) × (세트 수)</p>
+    <h2>⚙ 설정</h2>
+    <p class="sub">배정물량 값은 구글시트 <b>설정시트</b> 탭에서 불러옵니다(값 변경은 시트에서). 자동 이력 저장 시간은 이 화면에서 설정합니다.</p>
+
+    <div class="auto-snap">
+      <div class="as-head">
+        <span class="as-title">⏰ 자동 이력 저장</span>
+        <label class="as-toggle"><input type="checkbox" id="autoEnabled"> 사용</label>
+        <span class="as-hint" id="autoHint"></span>
+      </div>
+      <div class="as-times">
+        <div class="as-cell"><label>시간 1</label><input type="time" id="autoT0"></div>
+        <div class="as-cell"><label>시간 2</label><input type="time" id="autoT1"></div>
+        <div class="as-cell"><label>시간 3</label><input type="time" id="autoT2"></div>
+        <div class="as-cell"><label>시간 4</label><input type="time" id="autoT3"></div>
+      </div>
+      <p class="as-note">설정한 시각(분 단위)에 이 페이지가 <b>열려 있으면</b> 현재 현황이 자동으로 이력에 저장됩니다. 빈 칸은 무시되며, 같은 시각은 하루 1회만 저장됩니다.</p>
+    </div>
 
     <div class="view-global">
       <b>세트 수 (전체 공통)</b>
@@ -640,6 +679,7 @@ function renderSettingsView() {
 
 function openSettings() {
   renderSettingsView();
+  buildAutoUI();
   document.getElementById("overlay").classList.add("open");
 }
 function closeSettings() {
@@ -674,13 +714,15 @@ function dayLabelOf(key) {
   return d ? d.label : key;
 }
 
-// 현재 현황을 이력에 저장
-function captureSnapshot() {
+// 현재 현황을 이력에 저장 (opts.auto = 자동 저장 여부)
+function captureSnapshot(opts) {
+  const auto = !!(opts && opts.auto === true);
   const st = computeStatus(lastData, selectedDay);
   const now = new Date();
   const rec = {
     ts: fmtTime(now),
     day: dayLabelOf(selectedDay),
+    auto: auto,
     parts: st.parts.map(p => ({
       name: p.name, assigned: p.assigned, done: p.done, remain: p.remain, rate: Number(p.rate.toFixed(1)), ok: p.isOk,
     })),
@@ -699,7 +741,7 @@ function captureSnapshot() {
   list.push(rec);
   saveHistory(list);
   renderHistory();
-  flashBtn("저장됨 ✓");
+  if (!auto) flashBtn("저장됨 ✓");
 }
 
 let flashTimer = null;
@@ -721,7 +763,7 @@ function renderHistory() {
     return;
   }
   let head = `<thead><tr>
-    <th>일시</th><th>요일</th><th>전체 배정</th><th>전체 완료</th><th>전체 남은</th>
+    <th>일시</th><th>유형</th><th>요일</th><th>전체 배정</th><th>전체 완료</th><th>전체 남은</th>
     <th>달성률</th><th>달성파트</th><th>운행</th><th>거절</th><th>배차취소</th><th>배달취소</th><th></th>
   </tr></thead>`;
   let body = "<tbody>";
@@ -730,6 +772,7 @@ function renderHistory() {
     const r = list[i];
     body += `<tr>
       <td class="time">${r.ts}</td>
+      <td class="${r.auto ? "auto-mark" : ""}">${r.auto ? "⏰ 자동" : "수동"}</td>
       <td>${r.day}</td>
       <td>${r.total.assigned.toLocaleString()}</td>
       <td>${r.total.done.toLocaleString()}</td>
@@ -779,7 +822,7 @@ function buildExportRows() {
     }];
   }
   return source.map(r => {
-    const row = { "일시": r.ts, "기준요일": r.day };
+    const row = { "일시": r.ts, "유형": r.auto ? "자동" : "수동", "기준요일": r.day };
     for (const p of r.parts) {
       row[`${p.name}_배정`] = p.assigned;
       row[`${p.name}_완료`] = p.done;
@@ -831,7 +874,97 @@ function exportExcel() {
   }
 }
 
+/* ===================== 자동 이력 저장 (예약 시각) ===================== */
+const AUTO_KEY = "bupyeong_autosnap_v1";
+const FIRED_KEY = "bupyeong_autosnap_fired_v1";
+
+function loadAuto() {
+  let a = {};
+  try { a = JSON.parse(localStorage.getItem(AUTO_KEY)) || {}; } catch (e) {}
+  if (typeof a.enabled !== "boolean") a.enabled = false;
+  if (!Array.isArray(a.times)) a.times = [];
+  while (a.times.length < 4) a.times.push("");
+  a.times = a.times.slice(0, 4);
+  return a;
+}
+function saveAuto(a) { localStorage.setItem(AUTO_KEY, JSON.stringify(a)); }
+
+function todayDateStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+}
+function loadFired() {
+  let f = {};
+  try { f = JSON.parse(localStorage.getItem(FIRED_KEY)) || {}; } catch (e) {}
+  const today = todayDateStr();
+  if (f.date !== today) f = { date: today, times: [] };   // 날짜 바뀌면 초기화
+  if (!Array.isArray(f.times)) f.times = [];
+  return f;
+}
+function saveFired(f) { localStorage.setItem(FIRED_KEY, JSON.stringify(f)); }
+
+// 설정창 자동저장 UI 채우기
+function buildAutoUI() {
+  const a = loadAuto();
+  document.getElementById("autoEnabled").checked = a.enabled;
+  for (let i = 0; i < 4; i++) {
+    document.getElementById("autoT" + i).value = a.times[i] || "";
+  }
+  updateAutoHint();
+}
+function readAutoUI() {
+  const a = { enabled: document.getElementById("autoEnabled").checked, times: [] };
+  for (let i = 0; i < 4; i++) {
+    a.times.push(document.getElementById("autoT" + i).value || "");
+  }
+  return a;
+}
+function onAutoChange() {
+  saveAuto(readAutoUI());
+  updateAutoHint("저장됨 ✓");
+}
+let autoHintTimer = null;
+function updateAutoHint(msg) {
+  const el = document.getElementById("autoHint");
+  if (!el) return;
+  const a = loadAuto();
+  const active = a.enabled ? a.times.filter(t => t).sort() : [];
+  const base = a.enabled
+    ? (active.length ? "예약: " + active.join(" · ") : "사용 중 (시간 미설정)")
+    : "사용 안 함";
+  if (msg) {
+    el.textContent = msg;
+    if (autoHintTimer) clearTimeout(autoHintTimer);
+    autoHintTimer = setTimeout(() => { el.textContent = base; }, 1500);
+  } else {
+    el.textContent = base;
+  }
+}
+
+// 매 분 단위로 예약 시각 도달 시 자동 저장
+function checkAutoSnapshot() {
+  const a = loadAuto();
+  if (!a.enabled) return;
+  const now = new Date();
+  const hhmm = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+  const fired = loadFired();
+  let changed = false;
+  for (const t of a.times) {
+    if (!t) continue;
+    if (t === hhmm && !fired.times.includes(t)) {
+      captureSnapshot({ auto: true });
+      fired.times.push(t);
+      changed = true;
+    }
+  }
+  if (changed) { saveFired(fired); updateAutoHint(); }
+}
+
 /* ===================== 이벤트 / 부팅 ===================== */
+document.getElementById("autoEnabled").addEventListener("change", onAutoChange);
+for (let i = 0; i < 4; i++) {
+  document.getElementById("autoT" + i).addEventListener("change", onAutoChange);
+}
 document.getElementById("settingsBtn").addEventListener("click", openSettings);
 document.getElementById("cancelBtn").addEventListener("click", closeSettings);
 document.getElementById("reloadCfgBtn").addEventListener("click", reloadConfig);
@@ -850,6 +983,8 @@ renderCards(null);   // 초기 렌더
 renderHistory();     // 이력 표시
 fetchData();         // 첫 fetch (설정시트 + 데이터)
 setInterval(fetchData, REFRESH_MS);  // 30초 자동 새로고침
+checkAutoSnapshot();                 // 자동 저장 즉시 1회 체크
+setInterval(checkAutoSnapshot, 20000); // 20초마다 예약 시각 확인
 </script>
 </body>
 </html>
