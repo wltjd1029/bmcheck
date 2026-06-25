@@ -136,7 +136,7 @@
   .aux-item .k { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   .aux-item .v { font-size: 24px; font-weight: 700; }
 
-  /* Settings modal */
+  /* Settings (viewer) modal */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.6);
     display: none; align-items: flex-start; justify-content: center;
@@ -145,50 +145,41 @@
   .overlay.open { display: flex; }
   .modal {
     background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-    padding: 24px; width: 100%; max-width: 720px;
+    padding: 24px; width: 100%; max-width: 760px;
   }
   .modal h2 { margin: 0 0 4px; font-size: 18px; }
-  .modal p.sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
-  .global-set {
+  .modal p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .view-global {
     border: 1px solid var(--accent); border-radius: 12px; padding: 14px; margin-bottom: 16px;
     background: rgba(79, 140, 255, .08);
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  .global-set label { font-weight: 700; font-size: 14px; }
-  .global-set input {
-    width: 120px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-    color: var(--text); padding: 9px 10px; font-size: 16px; font-weight: 700;
+  .view-global b { font-size: 15px; }
+  .view-global .num { font-size: 20px; font-weight: 800; color: var(--accent); }
+  table.cfg { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.cfg th, table.cfg td {
+    border: 1px solid var(--line); padding: 8px 6px; text-align: center;
   }
-  .global-set .hint { font-size: 12px; color: var(--muted); }
-  .setting-row {
-    border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px;
+  table.cfg th { background: var(--card2); color: var(--muted); font-weight: 600; }
+  table.cfg td.part { text-align: left; font-weight: 700; white-space: nowrap; }
+  table.cfg th.is-today, table.cfg td.is-today { color: var(--accent); border-color: var(--accent); }
+  .cfg-warn {
+    margin-top: 14px; font-size: 12px; color: var(--warn);
+    background: rgba(255,176,32,.1); border: 1px solid rgba(255,176,32,.3);
+    border-radius: 8px; padding: 10px 12px; display: none;
   }
-  .setting-row .title {
-    font-weight: 700; margin-bottom: 10px; display: flex; align-items: center;
-    justify-content: space-between; flex-wrap: wrap; gap: 6px;
-  }
-  .setting-row .title .today-amt { font-size: 12px; font-weight: 600; color: var(--accent); }
-  .day-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
-  }
-  .day-cell { text-align: center; }
-  .day-cell label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-  .day-cell.is-today label { color: var(--accent); font-weight: 700; }
-  .day-cell input {
-    width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-    color: var(--text); padding: 8px 4px; font-size: 14px; text-align: center;
-  }
-  .day-cell.is-today input { border-color: var(--accent); }
-  .day-cell input:focus { outline: none; border-color: var(--accent); }
-  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .cfg-warn.show { display: block; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; align-items: center; }
+  .modal-actions a.sheet-link { font-size: 13px; color: var(--accent); margin-right: auto; text-decoration: none; }
   .gsheet-info {
-    font-size: 11px; color: var(--muted); margin-top: 16px; line-height: 1.5;
+    font-size: 11px; color: var(--muted); margin-top: 16px; line-height: 1.6;
     word-break: break-all; border-top: 1px solid var(--line); padding-top: 14px;
   }
   .updated { font-size: 11px; color: var(--muted); }
   @media (max-width: 560px) {
     .summary .value { font-size: 24px; }
-    .day-grid { grid-template-columns: repeat(4, 1fr); }
+    table.cfg { font-size: 12px; }
+    table.cfg th, table.cfg td { padding: 6px 3px; }
   }
 </style>
 </head>
@@ -225,29 +216,31 @@
   </section>
 </main>
 
-<!-- Settings modal -->
+<!-- Settings viewer modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
-    <h2>⚙ 배정물량 설정</h2>
-    <p class="sub">배정물량 = (해당 요일의 1세트 기준 배정건수) × (전체 세트 수)</p>
+    <h2>⚙ 배정물량 설정 (구글시트 연동)</h2>
+    <p class="sub">설정값은 구글시트 <b>설정시트</b> 탭에서 불러옵니다. 값 변경은 시트에서 하세요. 배정물량 = (해당 요일 1세트 배정건수) × (세트 수)</p>
 
-    <div class="global-set">
-      <label for="globalSets">현재 세트 수 (전체 공통)</label>
-      <input type="number" min="0" id="globalSets" value="0">
-      <span class="hint">한 번만 입력하면 모든 파트에 동일하게 적용됩니다.</span>
+    <div class="view-global">
+      <b>세트 수 (전체 공통)</b>
+      <span class="num" id="viewSets">-</span>
+      <span style="font-size:12px;color:var(--muted)">— 설정시트의 '세트수' 행에서 불러옴</span>
     </div>
 
-    <div id="settingRows"></div>
+    <div id="cfgTableWrap"></div>
+
+    <div class="cfg-warn" id="cfgWarn"></div>
 
     <div class="modal-actions">
-      <button class="btn" id="cancelBtn">취소</button>
-      <button class="btn primary" id="saveBtn">저장</button>
+      <a class="sheet-link" id="openSheetLink" href="#" target="_blank" rel="noopener">📄 구글시트 열기</a>
+      <button class="btn" id="cancelBtn">닫기</button>
+      <button class="btn primary" id="reloadCfgBtn">시트에서 다시 불러오기</button>
     </div>
     <div class="gsheet-info">
-      <b>구글시트 연동</b><br />
-      시트: 부평현황시트 · gviz CSV 실시간 fetch<br />
-      헤더 매핑: 아침점심피크완료 / 오후논피크완료 / 저녁피크완료 / 심야피크완료<br />
-      보조: 운행중인원수 / 거절 / 배차취소 / 배달취소(라이더귀책)
+      <b>구글시트 탭 구성 안내</b><br />
+      • <b>부평현황시트</b> 탭: 완료콜/보조 데이터 (아침점심피크완료 / 오후논피크완료 / 저녁피크완료 / 심야피크완료 / 운행중인원수 / 거절 / 배차취소 / 배달취소(라이더귀책))<br />
+      • <b>설정시트</b> 탭: 1행 헤더 = 구분, 수, 목, 금, 토, 일, 월, 화 / 2~5행 = 각 파트 요일별 1세트 배정건수 / 별도 행 '세트수' = 전체 세트 수
     </div>
   </div>
 </div>
@@ -255,11 +248,11 @@
 <script>
 /* ===================== 설정 ===================== */
 const SHEET_ID = "1Y07FIWd-pkjLPoc0LNpD_I4YQfrwVdezojdeSOXGePI";
-const SHEET_NAME = "부평현황시트";
+const SHEET_NAME = "부평현황시트";      // 완료콜/보조 데이터 탭
+const CONFIG_SHEET_NAME = "설정시트";   // 배정건수/세트수 설정 탭
 const REFRESH_MS = 30000;
-const STORAGE_KEY = "bupyeong_delivery_settings_v2";
 
-// 4개 파트 정의: 시트 헤더 매핑 포함
+// 4개 파트 정의: 데이터 헤더 매핑 + 설정시트 파트명
 const PARTS = [
   { id: "morning", name: "아침점심파트",   doneHeader: "아침점심피크완료" },
   { id: "offpeak", name: "오후논피크파트", doneHeader: "오후논피크완료" },
@@ -275,7 +268,7 @@ const AUX = [
   { id: "auxRiderCancel",    header: "배달취소(라이더귀책)" },
 ];
 
-// 요일 정의 (표시 순서: 수~화). key는 저장용, jsDay는 Date.getDay() 값(0=일)
+// 요일 정의 (표시 순서: 수~화). jsDay = Date.getDay() (0=일)
 const DAYS = [
   { key: "wed", label: "수", jsDay: 3 },
   { key: "thu", label: "목", jsDay: 4 },
@@ -291,31 +284,20 @@ function todayKey() {
   return found ? found.key : "wed";
 }
 
-/* ===================== localStorage ===================== */
+/* ===================== 설정 상태 ===================== */
 function emptyPart() {
   const perSetByDay = {};
   for (const d of DAYS) perSetByDay[d.key] = 0;
   return { perSetByDay };
 }
-function loadSettings() {
-  let s = {};
-  try { s = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) {}
-  if (typeof s.globalSets !== "number") s.globalSets = 0;
-  if (!s.parts) s.parts = {};
-  for (const p of PARTS) {
-    if (!s.parts[p.id]) s.parts[p.id] = emptyPart();
-    if (!s.parts[p.id].perSetByDay) s.parts[p.id].perSetByDay = emptyPart().perSetByDay;
-    for (const d of DAYS) {
-      if (typeof s.parts[p.id].perSetByDay[d.key] !== "number")
-        s.parts[p.id].perSetByDay[d.key] = 0;
-    }
-  }
+function emptySettings() {
+  const s = { globalSets: 0, parts: {} };
+  for (const p of PARTS) s.parts[p.id] = emptyPart();
   return s;
 }
-function saveSettings(s) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-}
-let settings = loadSettings();
+let settings = emptySettings(); // 구글시트 설정시트에서 채워짐
+let configLoaded = false;
+let configError = "";
 
 // 선택된 기준 요일 (기본: 오늘)
 let selectedDay = todayKey();
@@ -351,10 +333,13 @@ function parseCSV(text) {
   return rows;
 }
 
-function gvizUrl() {
+function gvizUrl(sheetName) {
   const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`;
-  const params = `tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}&_=${Date.now()}`;
+  const params = `tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&_=${Date.now()}`;
   return `${base}?${params}`;
+}
+function sheetEditUrl() {
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
 }
 
 // 숫자만 추출 (콤마, 단위 제거)
@@ -364,7 +349,7 @@ function toNum(v) {
   return m ? Number(m[0]) : 0;
 }
 
-/* 헤더로 값 찾기: 데이터행에서 해당 컬럼의 마지막(최신) 유효 숫자값 사용 */
+/* 데이터 탭: 헤더로 값 찾기 (마지막 유효 숫자값) */
 function valueByHeader(rows, header) {
   if (!rows.length) return 0;
   const headers = rows[0].map(h => (h || "").trim());
@@ -377,6 +362,47 @@ function valueByHeader(rows, header) {
     }
   }
   return 0;
+}
+
+/* 설정시트 파싱: 파트별 요일 배정건수 + 세트수 */
+function parseConfig(rows) {
+  const s = emptySettings();
+  if (!rows || !rows.length) { return s; }
+
+  // 1행에서 요일 컬럼 위치 찾기
+  const header = rows[0].map(h => (h || "").trim());
+  const dayCol = {};
+  for (const d of DAYS) {
+    let idx = header.indexOf(d.label);
+    if (idx === -1) idx = header.indexOf(d.label + "요일");
+    dayCol[d.key] = idx;
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const label = (row[0] || "").trim();
+    if (!label) continue;
+
+    // 세트수 행
+    if (label.replace(/\s/g, "").includes("세트")) {
+      for (let c = 1; c < row.length; c++) {
+        if (row[c] != null && String(row[c]).trim() !== "") { s.globalSets = toNum(row[c]); break; }
+      }
+      continue;
+    }
+
+    // 파트 행 (정확히 일치하거나 포함)
+    const part = PARTS.find(p => p.name === label || label.includes(p.name) || p.name.includes(label));
+    if (!part) continue;
+    for (const d of DAYS) {
+      const c = dayCol[d.key];
+      if (c != null && c >= 0 && row[c] != null) {
+        s.parts[part.id].perSetByDay[d.key] = toNum(row[c]);
+      }
+    }
+  }
+  return s;
 }
 
 /* ===================== 렌더링 ===================== */
@@ -444,23 +470,50 @@ function setStatus(state, text) {
   t.textContent = text;
 }
 
+// 설정시트 불러오기
+async function fetchConfig() {
+  try {
+    const res = await fetch(gvizUrl(CONFIG_SHEET_NAME), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    // 시트/탭이 없으면 구글이 에러 HTML/문구를 줄 수 있음
+    if (/<html/i.test(text) || /error/i.test(text.slice(0, 60)) && text.indexOf(",") === -1) {
+      throw new Error("설정시트 탭을 찾을 수 없음");
+    }
+    const rows = parseCSV(text);
+    settings = parseConfig(rows);
+    configLoaded = true;
+    configError = "";
+  } catch (e) {
+    console.error("config:", e);
+    configLoaded = false;
+    configError = e.message || "설정시트 불러오기 실패";
+    // 설정 실패 시 0으로 둠(데이터는 계속 표시)
+    settings = emptySettings();
+  }
+}
+
+// 데이터 탭 불러오기
 async function fetchData() {
   setStatus("", "불러오는 중…");
+  // 설정과 데이터를 함께 갱신
+  await fetchConfig();
   try {
-    const res = await fetch(gvizUrl(), { cache: "no-store" });
+    const res = await fetch(gvizUrl(SHEET_NAME), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
     const rows = parseCSV(text);
     lastData = rows;
     renderCards(rows);
-    setStatus("live", "실시간 연결됨");
+    if (configLoaded) setStatus("live", "실시간 연결됨");
+    else setStatus("err", "데이터 OK · 설정시트 확인 필요");
     const now = new Date();
     document.getElementById("updatedAt").textContent =
       "업데이트 " + now.toLocaleTimeString("ko-KR");
   } catch (e) {
     console.error(e);
     setStatus("err", "연동 실패 (시트 공개 여부 확인)");
-    renderCards(lastData); // 마지막 데이터 또는 설정값으로라도 렌더
+    renderCards(lastData);
   }
 }
 
@@ -482,82 +535,71 @@ function buildDaySelect() {
   });
 }
 
-/* ===================== 설정 모달 ===================== */
-function buildSettingRows() {
-  document.getElementById("globalSets").value = settings.globalSets || 0;
+/* ===================== 설정 뷰어 모달 ===================== */
+function renderSettingsView() {
   const tKey = todayKey();
-  const wrap = document.getElementById("settingRows");
-  wrap.innerHTML = "";
-  for (const p of PARTS) {
-    const part = settings.parts[p.id] || emptyPart();
-    const row = document.createElement("div");
-    row.className = "setting-row";
-    let cells = "";
-    for (const d of DAYS) {
-      const isToday = d.key === tKey;
-      cells += `
-        <div class="day-cell ${isToday ? "is-today" : ""}">
-          <label>${d.label}</label>
-          <input type="number" min="0" data-part="${p.id}" data-day="${d.key}"
-                 value="${part.perSetByDay[d.key] || 0}">
-        </div>`;
-    }
-    row.innerHTML = `
-      <div class="title">
-        <span>${p.name} <span style="font-weight:500;color:var(--muted);font-size:12px">— 요일별 1세트 기준 배정건수</span></span>
-        <span class="today-amt" id="amt-${p.id}"></span>
-      </div>
-      <div class="day-grid">${cells}</div>
-    `;
-    wrap.appendChild(row);
+  document.getElementById("viewSets").textContent =
+    (Number(settings.globalSets) || 0).toLocaleString() + " 세트";
+
+  // 표 만들기
+  let head = `<tr><th>파트</th>`;
+  for (const d of DAYS) {
+    head += `<th class="${d.key === tKey ? "is-today" : ""}">${d.label}</th>`;
   }
-  // 입력 시 오늘 기준 배정물량 실시간 표시
-  const recalc = () => {
-    const g = Number(document.getElementById("globalSets").value) || 0;
-    for (const p of PARTS) {
-      const inp = wrap.querySelector(`input[data-part="${p.id}"][data-day="${tKey}"]`);
-      const perSet = inp ? (Number(inp.value) || 0) : 0;
-      const el = document.getElementById("amt-" + p.id);
-      if (el) el.textContent = "오늘 배정물량 = " + (perSet * g).toLocaleString() + " 건";
+  head += `</tr>`;
+
+  let body = "";
+  for (const p of PARTS) {
+    body += `<tr><td class="part">${p.name}</td>`;
+    for (const d of DAYS) {
+      const v = settings.parts[p.id].perSetByDay[d.key] || 0;
+      body += `<td class="${d.key === tKey ? "is-today" : ""}">${v.toLocaleString()}</td>`;
     }
-  };
-  wrap.querySelectorAll("input").forEach(inp => inp.addEventListener("input", recalc));
-  document.getElementById("globalSets").addEventListener("input", recalc);
-  recalc();
+    body += `</tr>`;
+  }
+  document.getElementById("cfgTableWrap").innerHTML =
+    `<table class="cfg"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+
+  const warn = document.getElementById("cfgWarn");
+  if (!configLoaded) {
+    warn.classList.add("show");
+    warn.textContent = "⚠ 설정시트를 불러오지 못했습니다 (" + (configError || "탭 이름/공개 설정 확인") +
+      "). 구글시트에 '설정시트' 탭이 있고, 시트가 '링크가 있는 모든 사용자 - 뷰어'로 공개되어 있는지 확인하세요.";
+  } else {
+    warn.classList.remove("show");
+  }
+
+  document.getElementById("openSheetLink").href = sheetEditUrl();
 }
 
 function openSettings() {
-  buildSettingRows();
+  renderSettingsView();
   document.getElementById("overlay").classList.add("open");
 }
 function closeSettings() {
   document.getElementById("overlay").classList.remove("open");
 }
-function saveSettingsFromForm() {
-  settings.globalSets = Number(document.getElementById("globalSets").value) || 0;
-  const wrap = document.getElementById("settingRows");
-  wrap.querySelectorAll("input").forEach(inp => {
-    const part = inp.dataset.part, day = inp.dataset.day;
-    if (!settings.parts[part]) settings.parts[part] = emptyPart();
-    settings.parts[part].perSetByDay[day] = Number(inp.value) || 0;
-  });
-  saveSettings(settings);
-  closeSettings();
+async function reloadConfig() {
+  const btn = document.getElementById("reloadCfgBtn");
+  btn.textContent = "불러오는 중…";
+  await fetchConfig();
   renderCards(lastData);
+  renderSettingsView();
+  btn.textContent = "시트에서 다시 불러오기";
 }
 
 /* ===================== 이벤트 / 부팅 ===================== */
 document.getElementById("settingsBtn").addEventListener("click", openSettings);
 document.getElementById("cancelBtn").addEventListener("click", closeSettings);
-document.getElementById("saveBtn").addEventListener("click", saveSettingsFromForm);
+document.getElementById("reloadCfgBtn").addEventListener("click", reloadConfig);
 document.getElementById("refreshBtn").addEventListener("click", fetchData);
 document.getElementById("overlay").addEventListener("click", (e) => {
   if (e.target.id === "overlay") closeSettings();
 });
 
 buildDaySelect();    // 요일 선택 (기본 오늘)
-renderCards(null);   // 설정값 기준 초기 렌더
-fetchData();         // 첫 fetch
+renderCards(null);   // 초기 렌더
+fetchData();         // 첫 fetch (설정시트 + 데이터)
 setInterval(fetchData, REFRESH_MS);  // 30초 자동 새로고침
 </script>
 </body>
