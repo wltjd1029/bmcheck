@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>부평 배달현황 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0f1115;
@@ -176,6 +177,37 @@
     word-break: break-all; border-top: 1px solid var(--line); padding-top: 14px;
   }
   .updated { font-size: 11px; color: var(--muted); }
+
+  /* History */
+  .history {
+    margin-top: 20px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+  }
+  .history .hhead {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .history h2 { font-size: 14px; margin: 0; color: var(--muted); font-weight: 600; }
+  .history .hactions { display: flex; gap: 8px; }
+  .btn.sm { padding: 6px 10px; font-size: 12px; }
+  .btn.danger { color: var(--bad); }
+  .btn.danger:hover { border-color: var(--bad); }
+  .hist-wrap { overflow-x: auto; }
+  table.hist { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  table.hist th, table.hist td {
+    border-bottom: 1px solid var(--line); padding: 9px 8px; text-align: center; white-space: nowrap;
+  }
+  table.hist th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  table.hist td.time { text-align: left; }
+  table.hist td.rate { color: var(--accent); font-weight: 700; }
+  table.hist .del {
+    color: var(--bad); cursor: pointer; background: none; border: none; font-size: 13px;
+  }
+  .hist-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
   @media (max-width: 560px) {
     .summary .value { font-size: 24px; }
     table.cfg { font-size: 12px; }
@@ -190,6 +222,8 @@
   <span class="spacer"></span>
   <select class="day-select" id="daySelect" title="기준 요일"></select>
   <span class="updated" id="updatedAt"></span>
+  <button class="btn" id="snapshotBtn">📸 기록 저장</button>
+  <button class="btn" id="exportBtn">⬇ 엑셀</button>
   <button class="btn" id="refreshBtn">새로고침</button>
   <button class="btn primary" id="settingsBtn">⚙ 설정</button>
 </header>
@@ -212,6 +246,20 @@
       <div class="aux-item"><div class="k">거절</div><div class="v" id="auxReject">-</div></div>
       <div class="aux-item"><div class="k">배차취소</div><div class="v" id="auxDispatchCancel">-</div></div>
       <div class="aux-item"><div class="k">배달취소(라이더귀책)</div><div class="v" id="auxRiderCancel">-</div></div>
+    </div>
+  </section>
+
+  <section class="history">
+    <div class="hhead">
+      <h2>📜 현황 이력 <span id="histCount" style="color:var(--muted);font-weight:400"></span></h2>
+      <div class="hactions">
+        <button class="btn sm" id="snapshotBtn2">📸 현재 기록 저장</button>
+        <button class="btn sm" id="exportBtn2">⬇ 엑셀 내보내기</button>
+        <button class="btn sm danger" id="clearHistBtn">전체 비우기</button>
+      </div>
+    </div>
+    <div class="hist-wrap">
+      <table class="hist" id="histTable"></table>
     </div>
   </section>
 </main>
@@ -405,14 +453,13 @@ function parseConfig(rows) {
   return s;
 }
 
-/* ===================== 렌더링 ===================== */
-function renderCards(data) {
-  const wrap = document.getElementById("cards");
-  wrap.innerHTML = "";
+/* ===================== 상태 계산 ===================== */
+// 현재 데이터+설정+선택요일 기준으로 전체 현황 객체 생성 (렌더/스냅샷 공용)
+function computeStatus(data, dayKey) {
+  const parts = [];
   let totalAssigned = 0, totalDone = 0, achieved = 0;
-
   for (const p of PARTS) {
-    const assigned = assignedFor(p.id, selectedDay);
+    const assigned = assignedFor(p.id, dayKey);
     const done = data ? valueByHeader(data, p.doneHeader) : 0;
     const remain = Math.max(assigned - done, 0);
     const rate = assigned > 0 ? (done / assigned) * 100 : 0;
@@ -420,7 +467,26 @@ function renderCards(data) {
     if (isOk) achieved++;
     totalAssigned += assigned;
     totalDone += done;
+    parts.push({ id: p.id, name: p.name, assigned, done, remain, rate, isOk });
+  }
+  const totalRemain = Math.max(totalAssigned - totalDone, 0);
+  const totalRate = totalAssigned > 0 ? (totalDone / totalAssigned) * 100 : 0;
+  const aux = {};
+  for (const a of AUX) aux[a.id] = data ? valueByHeader(data, a.header) : 0;
+  return {
+    parts, aux,
+    total: { assigned: totalAssigned, done: totalDone, remain: totalRemain, rate: totalRate, achieved, partCount: PARTS.length },
+  };
+}
 
+/* ===================== 렌더링 ===================== */
+function renderCards(data) {
+  const wrap = document.getElementById("cards");
+  wrap.innerHTML = "";
+  const st = computeStatus(data, selectedDay);
+
+  for (const p of st.parts) {
+    const assigned = p.assigned, done = p.done, remain = p.remain, rate = p.rate, isOk = p.isOk;
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
@@ -446,18 +512,16 @@ function renderCards(data) {
   }
 
   // 요약
-  const totalRemain = Math.max(totalAssigned - totalDone, 0);
-  const totalRate = totalAssigned > 0 ? (totalDone / totalAssigned) * 100 : 0;
-  document.getElementById("sumAssigned").textContent = totalAssigned.toLocaleString();
-  document.getElementById("sumDone").textContent = totalDone.toLocaleString();
-  document.getElementById("sumRemain").textContent = totalRemain.toLocaleString();
-  document.getElementById("sumRate").textContent = totalRate.toFixed(1) + "%";
-  document.getElementById("sumAchieved").textContent = achieved + " / " + PARTS.length;
+  document.getElementById("sumAssigned").textContent = st.total.assigned.toLocaleString();
+  document.getElementById("sumDone").textContent = st.total.done.toLocaleString();
+  document.getElementById("sumRemain").textContent = st.total.remain.toLocaleString();
+  document.getElementById("sumRate").textContent = st.total.rate.toFixed(1) + "%";
+  document.getElementById("sumAchieved").textContent = st.total.achieved + " / " + st.total.partCount;
 
   // 보조
   for (const a of AUX) {
     const el = document.getElementById(a.id);
-    if (el) el.textContent = data ? valueByHeader(data, a.header).toLocaleString() : "-";
+    if (el) el.textContent = data ? (st.aux[a.id] || 0).toLocaleString() : "-";
   }
 }
 
@@ -588,17 +652,200 @@ async function reloadConfig() {
   btn.textContent = "시트에서 다시 불러오기";
 }
 
+/* ===================== 이력 (localStorage) + 엑셀 내보내기 ===================== */
+const HISTORY_KEY = "bupyeong_history_v1";
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveHistory(list) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+}
+function pad2(n) { return String(n).padStart(2, "0"); }
+function fmtTime(d) {
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+    " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+}
+function dayLabelOf(key) {
+  const d = DAYS.find(x => x.key === key);
+  return d ? d.label : key;
+}
+
+// 현재 현황을 이력에 저장
+function captureSnapshot() {
+  const st = computeStatus(lastData, selectedDay);
+  const now = new Date();
+  const rec = {
+    ts: fmtTime(now),
+    day: dayLabelOf(selectedDay),
+    parts: st.parts.map(p => ({
+      name: p.name, assigned: p.assigned, done: p.done, remain: p.remain, rate: Number(p.rate.toFixed(1)), ok: p.isOk,
+    })),
+    total: {
+      assigned: st.total.assigned, done: st.total.done, remain: st.total.remain,
+      rate: Number(st.total.rate.toFixed(1)), achieved: st.total.achieved, partCount: st.total.partCount,
+    },
+    aux: {
+      running: st.aux.auxRunning || 0,
+      reject: st.aux.auxReject || 0,
+      dispatchCancel: st.aux.auxDispatchCancel || 0,
+      riderCancel: st.aux.auxRiderCancel || 0,
+    },
+  };
+  const list = loadHistory();
+  list.push(rec);
+  saveHistory(list);
+  renderHistory();
+  flashBtn("저장됨 ✓");
+}
+
+let flashTimer = null;
+function flashBtn(text) {
+  const b = document.getElementById("snapshotBtn");
+  if (!b) return;
+  const orig = "📸 기록 저장";
+  b.textContent = text;
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { b.textContent = orig; }, 1500);
+}
+
+function renderHistory() {
+  const list = loadHistory();
+  const tbl = document.getElementById("histTable");
+  document.getElementById("histCount").textContent = list.length ? "(" + list.length + "건)" : "";
+  if (!list.length) {
+    tbl.innerHTML = `<tr><td class="hist-empty">저장된 이력이 없습니다. '📸 기록 저장'을 누르면 현재 현황이 쌓입니다.</td></tr>`;
+    return;
+  }
+  let head = `<thead><tr>
+    <th>일시</th><th>요일</th><th>전체 배정</th><th>전체 완료</th><th>전체 남은</th>
+    <th>달성률</th><th>달성파트</th><th>운행</th><th>거절</th><th>배차취소</th><th>배달취소</th><th></th>
+  </tr></thead>`;
+  let body = "<tbody>";
+  // 최신순 표시
+  for (let i = list.length - 1; i >= 0; i--) {
+    const r = list[i];
+    body += `<tr>
+      <td class="time">${r.ts}</td>
+      <td>${r.day}</td>
+      <td>${r.total.assigned.toLocaleString()}</td>
+      <td>${r.total.done.toLocaleString()}</td>
+      <td>${r.total.remain.toLocaleString()}</td>
+      <td class="rate">${r.total.rate.toFixed(1)}%</td>
+      <td>${r.total.achieved}/${r.total.partCount}</td>
+      <td>${(r.aux.running||0).toLocaleString()}</td>
+      <td>${(r.aux.reject||0).toLocaleString()}</td>
+      <td>${(r.aux.dispatchCancel||0).toLocaleString()}</td>
+      <td>${(r.aux.riderCancel||0).toLocaleString()}</td>
+      <td><button class="del" data-idx="${i}" title="삭제">✕</button></td>
+    </tr>`;
+  }
+  body += "</tbody>";
+  tbl.innerHTML = head + body;
+  tbl.querySelectorAll(".del").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.idx);
+      const l = loadHistory();
+      l.splice(idx, 1);
+      saveHistory(l);
+      renderHistory();
+    });
+  });
+}
+
+function clearHistory() {
+  if (!loadHistory().length) return;
+  if (!confirm("저장된 모든 이력을 삭제할까요? 되돌릴 수 없습니다.")) return;
+  saveHistory([]);
+  renderHistory();
+}
+
+// 내보내기용 평면 행 생성 (파트별 컬럼 포함)
+function buildExportRows() {
+  const list = loadHistory();
+  // 이력이 없으면 현재 현황 1건을 즉석으로 내보냄
+  let source = list;
+  if (!source.length) {
+    const st = computeStatus(lastData, selectedDay);
+    const now = new Date();
+    source = [{
+      ts: fmtTime(now), day: dayLabelOf(selectedDay),
+      parts: st.parts.map(p => ({ name: p.name, assigned: p.assigned, done: p.done, remain: p.remain, rate: Number(p.rate.toFixed(1)) })),
+      total: { assigned: st.total.assigned, done: st.total.done, remain: st.total.remain, rate: Number(st.total.rate.toFixed(1)), achieved: st.total.achieved, partCount: st.total.partCount },
+      aux: { running: st.aux.auxRunning||0, reject: st.aux.auxReject||0, dispatchCancel: st.aux.auxDispatchCancel||0, riderCancel: st.aux.auxRiderCancel||0 },
+    }];
+  }
+  return source.map(r => {
+    const row = { "일시": r.ts, "기준요일": r.day };
+    for (const p of r.parts) {
+      row[`${p.name}_배정`] = p.assigned;
+      row[`${p.name}_완료`] = p.done;
+      row[`${p.name}_남은`] = p.remain;
+      row[`${p.name}_달성률(%)`] = p.rate;
+    }
+    row["전체_배정"] = r.total.assigned;
+    row["전체_완료"] = r.total.done;
+    row["전체_남은"] = r.total.remain;
+    row["전체_달성률(%)"] = r.total.rate;
+    row["달성파트"] = `${r.total.achieved}/${r.total.partCount}`;
+    row["운행중인원수"] = r.aux.running;
+    row["거절"] = r.aux.reject;
+    row["배차취소"] = r.aux.dispatchCancel;
+    row["배달취소(라이더귀책)"] = r.aux.riderCancel;
+    return row;
+  });
+}
+
+function exportFilename(ext) {
+  const d = new Date();
+  return `부평배달현황_${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}.${ext}`;
+}
+
+function exportExcel() {
+  const rows = buildExportRows();
+  if (!rows.length) { alert("내보낼 현황이 없습니다."); return; }
+
+  if (window.XLSX) {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "배달현황이력");
+    XLSX.writeFile(wb, exportFilename("xlsx"));
+  } else {
+    // 엑셀 라이브러리 로드 실패 시 CSV(BOM)로 대체 → 엑셀에서 열림
+    const headers = Object.keys(rows[0]);
+    const esc = v => {
+      const s = String(v == null ? "" : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    let csv = headers.join(",") + "\n";
+    for (const r of rows) csv += headers.map(h => esc(r[h])).join(",") + "\n";
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = exportFilename("csv");
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+}
+
 /* ===================== 이벤트 / 부팅 ===================== */
 document.getElementById("settingsBtn").addEventListener("click", openSettings);
 document.getElementById("cancelBtn").addEventListener("click", closeSettings);
 document.getElementById("reloadCfgBtn").addEventListener("click", reloadConfig);
 document.getElementById("refreshBtn").addEventListener("click", fetchData);
+document.getElementById("snapshotBtn").addEventListener("click", captureSnapshot);
+document.getElementById("snapshotBtn2").addEventListener("click", captureSnapshot);
+document.getElementById("exportBtn").addEventListener("click", exportExcel);
+document.getElementById("exportBtn2").addEventListener("click", exportExcel);
+document.getElementById("clearHistBtn").addEventListener("click", clearHistory);
 document.getElementById("overlay").addEventListener("click", (e) => {
   if (e.target.id === "overlay") closeSettings();
 });
 
 buildDaySelect();    // 요일 선택 (기본 오늘)
 renderCards(null);   // 초기 렌더
+renderHistory();     // 이력 표시
 fetchData();         // 첫 fetch (설정시트 + 데이터)
 setInterval(fetchData, REFRESH_MS);  // 30초 자동 새로고침
 </script>
